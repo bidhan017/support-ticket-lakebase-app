@@ -3,8 +3,6 @@ command:
   - "run"
   - "app.py"
 
-resources:
-  - name: postgres
-    postgres:
-      branch: projects/support-ticket-app/branches/production
-      database: databricks_postgres
+env:
+  - name: DATABASE_URL
+    value: postgresql://student:npg_kSuZ38gAynoV@ep-bitter-meadow-d81ncl50.database.us-east-2.cloud.databricks.com/databricks_postgres?sslmode=require

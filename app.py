@@ -4,32 +4,16 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
-# --- Lakebase connection via environment variables (injected by Databricks Apps) ---
+# --- Database connection via connection string ---
 def get_conn():
-    # Debug: Check which environment variables are set
-    pg_vars = {
-        "PGHOST": os.getenv("PGHOST"),
-        "PGPORT": os.getenv("PGPORT", "5432"),
-        "PGDATABASE": os.getenv("PGDATABASE"),
-        "PGUSER": os.getenv("PGUSER"),
-        "PGPASSWORD": "***" if os.getenv("PGPASSWORD") else None,
-    }
+    # Use DATABASE_URL environment variable (injected by Databricks Apps)
+    database_url = os.getenv("DATABASE_URL")
     
-    # Check for missing variables
-    missing = [k for k, v in pg_vars.items() if v is None or (k != "PGPASSWORD" and v == "")]
-    if missing:
-        st.error(f"Missing environment variables: {', '.join(missing)}")
-        st.info("Available env vars: " + ", ".join([k for k in pg_vars.keys() if pg_vars[k]]))
-        raise ValueError(f"Missing required environment variables: {missing}")
+    if not database_url:
+        st.error("Missing DATABASE_URL environment variable")
+        raise ValueError("DATABASE_URL environment variable is required")
     
-    return psycopg2.connect(
-        host=os.getenv("PGHOST"),
-        port=int(os.getenv("PGPORT", "5432")),
-        database=os.getenv("PGDATABASE"),
-        user=os.getenv("PGUSER"),
-        password=os.getenv("PGPASSWORD"),
-        sslmode="require",
-    )
+    return psycopg2.connect(database_url)
 
 st.set_page_config(page_title="Support Tickets (Lakebase)", layout="wide")
 st.title("Lakebase Support Tickets")

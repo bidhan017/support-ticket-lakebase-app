@@ -3,17 +3,9 @@ command:
   - "run"
   - "app.py"
 
-env:
-  - name: LAKEBASE_POSTGRES_PROJECT
-    value: support-ticket-app
-  - name: LAKEBASE_POSTGRES_BRANCH
-    value: production
-  - name: LAKEBASE_POSTGRES_DATABASE
-    value: databricks_postgres
-
 resources:
   - name: lakebase
     lakebase:
       postgres:
-        branch: ${LAKEBASE_POSTGRES_BRANCH}
-        database: ${LAKEBASE_POSTGRES_DATABASE}
+        branch: projects/support-ticket-app/branches/production
+        database: projects/support-ticket-app/branches/production/databases/databricks-postgres

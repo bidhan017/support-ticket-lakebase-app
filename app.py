@@ -4,17 +4,6 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
-# --- Database connection via connection string ---
-def get_conn():
-    # Use DATABASE_URL environment variable (injected by Databricks Apps)
-    database_url = os.getenv("DATABASE_URL")
-    
-    if not database_url:
-        st.error("Missing DATABASE_URL environment variable")
-        raise ValueError("DATABASE_URL environment variable is required")
-    
-    return psycopg2.connect(database_url)
-
 st.set_page_config(page_title="Support Tickets (Lakebase)", layout="wide")
 st.title("Lakebase Support Tickets")
 

@@ -4,6 +4,24 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
+# --- Database connection via connection string from secrets ---
+def get_conn():
+    from databricks.sdk import WorkspaceClient
+    
+    w = WorkspaceClient()
+    
+    # Fetch connection string from Databricks Secrets
+    # This matches the app resource configuration: scope="database", key="lakebase-url"
+    connection_string = w.secrets.get_secret(
+        scope="database",
+        key="lakebase-url"
+    ).value
+    
+    if not connection_string:
+        raise ValueError("Connection string is empty in secrets")
+    
+    return psycopg2.connect(connection_string)
+
 st.set_page_config(page_title="Support Tickets (Lakebase)", layout="wide")
 st.title("Lakebase Support Tickets")
 

@@ -6,19 +6,24 @@ from datetime import datetime
 
 # --- Database connection via connection string from secrets ---
 def get_conn():
+    import base64
     from databricks.sdk import WorkspaceClient
     
     w = WorkspaceClient()
     
     # Fetch connection string from Databricks Secrets
     # This matches the app resource configuration: scope="database", key="lakebase-url"
-    connection_string = w.secrets.get_secret(
+    secret_value = w.secrets.get_secret(
         scope="database",
         key="lakebase-url"
     ).value
     
-    if not connection_string:
+    if not secret_value:
         raise ValueError("Connection string is empty in secrets")
+    
+    # Databricks Secrets API returns base64-encoded values
+    # Decode it to get the actual connection string
+    connection_string = base64.b64decode(secret_value).decode('utf-8')
     
     return psycopg2.connect(connection_string)
 

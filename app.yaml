@@ -4,8 +4,8 @@ command:
   - "app.py"
 
 resources:
-  - name: lakebase
-    lakebase:
-      postgres:
-        branch: projects/support-ticket-app/branches/production
-        database: projects/support-ticket-app/branches/production/databases/databricks-postgres
+  - name: database
+    postgres:
+      branch: projects/support-ticket-app/branches/production
+      database: projects/support-ticket-app/branches/production/databases/databricks-postgres
+      permission: CAN_CONNECT_AND_CREATE

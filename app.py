@@ -6,6 +6,22 @@ from datetime import datetime
 
 # --- Lakebase connection via environment variables (injected by Databricks Apps) ---
 def get_conn():
+    # Debug: Check which environment variables are set
+    pg_vars = {
+        "PGHOST": os.getenv("PGHOST"),
+        "PGPORT": os.getenv("PGPORT", "5432"),
+        "PGDATABASE": os.getenv("PGDATABASE"),
+        "PGUSER": os.getenv("PGUSER"),
+        "PGPASSWORD": "***" if os.getenv("PGPASSWORD") else None,
+    }
+    
+    # Check for missing variables
+    missing = [k for k, v in pg_vars.items() if v is None or (k != "PGPASSWORD" and v == "")]
+    if missing:
+        st.error(f"Missing environment variables: {', '.join(missing)}")
+        st.info("Available env vars: " + ", ".join([k for k in pg_vars.keys() if pg_vars[k]]))
+        raise ValueError(f"Missing required environment variables: {missing}")
+    
     return psycopg2.connect(
         host=os.getenv("PGHOST"),
         port=int(os.getenv("PGPORT", "5432")),

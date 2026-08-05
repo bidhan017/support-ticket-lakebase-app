@@ -25,15 +25,15 @@ def fetch_tickets(status_filter=None):
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             if status_filter and status_filter != "All":
                 cur.execute("""
-                    SELECT ticket_id, title, status, priority, created_by, created_at
-                    FROM support.tickets
+                    SELECT ticket_id, title, status, created_by, created_at
+                    FROM tickets
                     WHERE status = %s
                     ORDER BY created_at DESC
                 """, (status_filter,))
             else:
                 cur.execute("""
-                    SELECT ticket_id, title, status, priority, created_by, created_at
-                    FROM support.tickets
+                    SELECT ticket_id, title, status, created_by, created_at
+                    FROM tickets
                     ORDER BY created_at DESC
                 """)
             return cur.fetchall()
@@ -43,20 +43,20 @@ def fetch_messages(ticket_id):
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT message_id, message_text, author, created_at
-                FROM support.ticket_messages
+                FROM ticket_messages
                 WHERE ticket_id = %s
                 ORDER BY created_at ASC
             """, (ticket_id,))
             return cur.fetchall()
 
-def create_ticket(title, status, priority, created_by):
+def create_ticket(title, status, created_by):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO support.tickets (title, status, priority, created_by, created_at)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO tickets (title, status, created_by, created_at)
+                VALUES (%s, %s, %s, %s)
                 RETURNING ticket_id
-            """, (title, status, priority, created_by, datetime.utcnow()))
+            """, (title, status, created_by, datetime.utcnow()))
             tid = cur.fetchone()[0]
             conn.commit()
             return tid
@@ -65,7 +65,7 @@ def add_message(ticket_id, message_text, author):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO support.ticket_messages (ticket_id, message_text, author, created_at)
+                INSERT INTO ticket_messages (ticket_id, message_text, author, created_at)
                 VALUES (%s, %s, %s, %s)
                 RETURNING message_id
             """, (ticket_id, message_text, author, datetime.utcnow()))
@@ -77,7 +77,7 @@ def update_ticket_status(ticket_id, new_status):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                UPDATE support.tickets
+                UPDATE tickets
                 SET status = %s
                 WHERE ticket_id = %s
             """, (new_status, ticket_id))
@@ -92,7 +92,7 @@ def ticket_stats():
                   COUNT(*) FILTER (WHERE status='open') AS open_count,
                   COUNT(*) FILTER (WHERE status='in_progress') AS in_progress_count,
                   COUNT(*) FILTER (WHERE status='resolved') AS resolved_count
-                FROM support.tickets
+                FROM tickets
             """)
             return cur.fetchone()
 
@@ -105,11 +105,11 @@ cols[1].metric("Open", stats['open_count'])
 cols[2].metric("In Progress", stats['in_progress_count'])
 cols[3].metric("Resolved", stats['resolved_count'])
 
+st.divider()
 st.subheader("Create New Ticket")
 with st.form("new_ticket_form"):
     t_title = st.text_input("Title", placeholder="Short descriptive title")
     t_status = st.selectbox("Status", ["open", "in_progress", "resolved"], index=0)
-    t_priority = st.selectbox("Priority", ["low", "medium", "high"], index=1)
     t_by = st.text_input("Created by (email)", placeholder="you@example.com")
     submitted = st.form_submit_button("Create ticket")
     if submitted:
@@ -117,13 +117,15 @@ with st.form("new_ticket_form"):
             st.error("Title and Created by are required.")
         else:
             try:
-                tid = create_ticket(t_title.strip(), t_status, t_priority, t_by.strip())
-                st.success(f"Ticket created with ID {tid}. Refreshing list...")
+                tid = create_ticket(t_title.strip(), t_status, t_by.strip())
+                st.success(f"✓ Ticket created with ID {tid}. Refreshing list...")
                 st.cache_data.clear()
+                st.rerun()
             except Exception as e:
                 st.error(f"Failed to create ticket: {e}")
 
-st.subheader("Tickets")
+st.divider()
+st.subheader("All Tickets")
 status_filter = st.selectbox("Filter by status", ["All", "open", "in_progress", "resolved"], index=0)
 tickets = fetch_tickets(status_filter if status_filter != "All" else None)
 
@@ -138,7 +140,7 @@ else:
     current_ticket = next(t for t in tickets if t['ticket_id']==selected)
 
     st.write(f"**Ticket #{current_ticket['ticket_id']}** — {current_ticket['title']}")
-    st.write(f"Status: `{current_ticket['status']}` | Priority: `{current_ticket['priority']}` | By: {current_ticket['created_by']}")
+    st.write(f"Status: `{current_ticket['status']}` | Created by: {current_ticket['created_by']} | {current_ticket['created_at']}")
 
     # Update status
     with st.form("update_status_form"):
@@ -147,14 +149,17 @@ else:
         if us:
             try:
                 update_ticket_status(current_ticket['ticket_id'], new_status)
-                st.success("Status updated. Refreshing...")
+                st.success("✓ Status updated. Refreshing...")
                 st.cache_data.clear()
+                st.rerun()
             except Exception as e:
                 st.error(f"Failed to update status: {e}")
 
     # Messages
     st.write("### Messages")
     msgs = fetch_messages(current_ticket['ticket_id'])
+    if not msgs:
+        st.info("No messages yet. Be the first to add one!")
     for m in msgs:
         st.chat_message(m['author']).write(f"{m['message_text']}  \n*— {m['author']} at {m['created_at']}*")
 
@@ -169,7 +174,8 @@ else:
             else:
                 try:
                     mid = add_message(current_ticket['ticket_id'], m_text.strip(), m_author.strip())
-                    st.success(f"Message added (ID {mid}). Refreshing...")
+                    st.success(f"✓ Message added (ID {mid}). Refreshing...")
                     st.cache_data.clear()
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Failed to add message: {e}")

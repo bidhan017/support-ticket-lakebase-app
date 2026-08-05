@@ -4,8 +4,7 @@ command:
   - "app.py"
 
 resources:
-  - name: database
+  - name: postgres
     postgres:
       branch: projects/support-ticket-app/branches/production
-      database: projects/support-ticket-app/branches/production/databases/databricks-postgres
-      permission: CAN_CONNECT_AND_CREATE
+      database: databricks_postgres

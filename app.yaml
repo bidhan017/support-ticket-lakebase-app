@@ -2,7 +2,3 @@ command:
   - "streamlit"
   - "run"
   - "app.py"
-
-env:
-  - name: DATABASE_URL
-    value: "{{secrets/support-app-secrets/database-url}}"

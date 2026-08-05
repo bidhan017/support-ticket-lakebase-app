@@ -4,16 +4,28 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
-# --- Database connection via connection string ---
+# --- Database connection via Databricks Secrets ---
 def get_conn():
-    # Use DATABASE_URL environment variable (injected by Databricks Apps)
-    database_url = os.getenv("DATABASE_URL")
-    
-    if not database_url:
-        st.error("Missing DATABASE_URL environment variable")
-        raise ValueError("DATABASE_URL environment variable is required")
-    
-    return psycopg2.connect(database_url)
+    # Fetch connection string from Databricks Secrets
+    try:
+        from databricks.sdk import WorkspaceClient
+        w = WorkspaceClient()
+        
+        # Get connection string from secrets
+        database_url = w.secrets.get_secret(
+            scope="support-app-secrets",
+            key="database-url"
+        ).value
+        
+        if not database_url:
+            st.error("Secret value is empty")
+            raise ValueError("Connection string secret is empty")
+        
+        return psycopg2.connect(database_url)
+        
+    except Exception as e:
+        st.error(f"Failed to get database credentials: {str(e)}")
+        raise
 
 st.set_page_config(page_title="Support Tickets (Lakebase)", layout="wide")
 st.title("Lakebase Support Tickets")

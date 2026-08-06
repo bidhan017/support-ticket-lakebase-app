@@ -14,9 +14,28 @@ A Databricks App for managing internal support tickets, built with Streamlit and
 ## Architecture
 
 * **Frontend**: Streamlit
-* **Database**: PostgreSQL (Lakebase)
+* **Database**: PostgreSQL (Lakebase or external)
 * **Hosting**: Databricks Apps
 * **Security**: Databricks Secrets for credential management
+* **Authentication**: Databricks SDK with runtime secret fetching
+
+## How It Works
+
+1. **Secret Storage**: Database connection string is stored in Databricks Secrets (scope: `database`, key: `lakebase-url`)
+2. **Runtime Retrieval**: App uses Databricks SDK to fetch the secret when connecting to the database
+3. **Base64 Decoding**: Databricks Secrets API returns base64-encoded values - the app decodes them automatically
+4. **Connection**: psycopg2 uses the decoded connection string to connect to PostgreSQL
+
+```python
+# Simplified connection flow in app.py
+import base64
+from databricks.sdk import WorkspaceClient
+
+w = WorkspaceClient()
+secret_value = w.secrets.get_secret(scope="database", key="lakebase-url").value
+connection_string = base64.b64decode(secret_value).decode('utf-8')
+conn = psycopg2.connect(connection_string)
+```
 
 ## Setup Instructions
 
@@ -63,10 +82,20 @@ python setup_secrets.py
 ```
 
 The script will:
-1. Create a Databricks secret scope `support-app-secrets`
+1. Create a Databricks secret scope `database`
 2. Prompt you for your PostgreSQL connection string
-3. Store it securely in Databricks Secrets
+3. Store it securely in Databricks Secrets as `lakebase-url`
 4. Set appropriate permissions
+
+**Connection String Format:**
+```
+postgresql://username:password@host:port/database?sslmode=require
+```
+
+For example:
+```
+postgresql://student:npg_xxx@ep-xxx.database.us-east-2.cloud.databricks.com:5432/databricks_postgres?sslmode=require
+```
 
 #### Option B: Manual Setup
 
@@ -74,27 +103,35 @@ Using the Databricks CLI:
 
 ```bash
 # Create secret scope
-databricks secrets create-scope support-app-secrets
+databricks secrets create-scope database
 
 # Store connection string
-databricks secrets put-secret support-app-secrets database-url \
+databricks secrets put-secret database lakebase-url \
   --string-value "postgresql://username:password@host:port/database?sslmode=require"
 
 # Set permissions
-databricks secrets put-acl support-app-secrets users READ
+databricks secrets put-acl database users READ
 ```
 
 ### 4. Configuration
 
-The `app.yaml` file is already configured to reference the secret:
+The `app.yaml` file is minimal - no environment variables needed:
 
 ```yaml
-env:
-  - name: DATABASE_URL
-    value: "{{secrets/support-app-secrets/database-url}}"
+command:
+  - "streamlit"
+  - "run"
+  - "app.py"
 ```
 
-**✅ Safe to commit** - This references the secret without exposing credentials.
+**How it works**: The app fetches the connection string at runtime using the Databricks SDK:
+```python
+from databricks.sdk import WorkspaceClient
+w = WorkspaceClient()
+secret_value = w.secrets.get_secret(scope="database", key="lakebase-url").value
+```
+
+**✅ Safe to commit** - No credentials in code or configuration.
 
 ### 5. Deploy to Databricks Apps
 
@@ -130,23 +167,30 @@ The app will automatically redeploy on the next update.
 ```
 .
 ├── app.py                 # Main Streamlit application
-├── app.yaml               # Databricks Apps configuration
-├── requirements.txt       # Python dependencies
+├── app.yaml               # Databricks Apps configuration (minimal)
+├── requirements.txt       # Python dependencies (streamlit, psycopg2-binary, databricks-sdk)
 ├── setup_secrets.py       # Secret management script (run once)
 ├── .gitignore            # Prevents committing sensitive files
 ├── README.md             # This file
 └── LICENSE               # License file
 ```
 
+### Key Dependencies
+
+* `streamlit` - Web framework for the UI
+* `psycopg2-binary` - PostgreSQL database adapter
+* `databricks-sdk` - Required for fetching secrets at runtime
+
 ## Security Best Practices
 
 ### ✅ DO:
 
 * Store credentials in Databricks Secrets
-* Reference secrets using `{{secrets/scope/key}}` syntax in `app.yaml`
+* Fetch secrets at runtime using the Databricks SDK
 * Use `.gitignore` to prevent committing sensitive files
 * Rotate credentials regularly
 * Use read-only database users when possible
+* Decode base64-encoded secret values properly
 
 ### ❌ DON'T:
 
@@ -163,12 +207,20 @@ The app will automatically redeploy on the next update.
 # Install dependencies
 pip install -r requirements.txt
 
-# Set environment variable
-export DATABASE_URL="postgresql://..."
+# Ensure Databricks CLI is configured
+databricks configure
 
-# Run locally
+# Set up secrets (run once)
+python setup_secrets.py
+
+# Run locally (uses Databricks SDK to fetch secrets)
 streamlit run app.py
 ```
+
+**Note**: Local testing requires:
+* Databricks CLI configured with valid credentials
+* Secret scope `database` with key `lakebase-url` already set up
+* The Databricks SDK will authenticate using your CLI profile
 
 ### Adding Features
 
@@ -179,14 +231,15 @@ streamlit run app.py
 
 ## Troubleshooting
 
-### "Missing DATABASE_URL environment variable"
+### "Connection string is empty in secrets"
 
 **Cause**: Secret not configured or app doesn't have access.
 
 **Fix**:
 1. Run `setup_secrets.py` to configure the secret
-2. Verify secret exists: `databricks secrets list-secrets support-app-secrets`
+2. Verify secret exists: `databricks secrets list-secrets database`
 3. Check app has read access to the scope
+4. Verify the secret value is set: `databricks secrets get-secret database lakebase-url`
 
 ### Connection errors
 
@@ -197,6 +250,19 @@ streamlit run app.py
 2. Verify database allows connections from Databricks IPs
 3. Check SSL mode is set correctly (`?sslmode=require`)
 
+### "invalid dsn: invalid connection option"
+
+**Cause**: Secret value is base64-encoded but not being decoded.
+
+**Fix**:
+1. Ensure `app.py` includes base64 decoding:
+   ```python
+   import base64
+   connection_string = base64.b64decode(secret_value).decode('utf-8')
+   ```
+2. Verify the secret contains a valid connection string (not already base64-encoded)
+3. Test decoding manually to verify the format
+
 ### App deployment fails
 
 **Cause**: Invalid `app.yaml` or missing files.
@@ -205,6 +271,7 @@ streamlit run app.py
 1. Validate YAML syntax
 2. Ensure all files are committed to Git
 3. Check app logs: `databricks apps logs support-ticket-lakebase-app`
+4. Verify all dependencies are listed in `requirements.txt`
 
 ## Contributing
 
